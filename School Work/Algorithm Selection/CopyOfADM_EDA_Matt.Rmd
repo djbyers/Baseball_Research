@@ -1,0 +1,923 @@
+---
+title: "Project EDA"
+author: "Douglas Byers, Matt Muller, TJ Rogers"
+date: "11/2/2020"
+output:
+  pdf_document:
+    fig_height: 2
+    fig_width: 3.5
+  html_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include = FALSE, warning = FALSE}
+library(dplyr)
+library(readr)
+library(mosaic)
+suppressMessages(library(tidyverse))
+suppressMessages(library(glmnet))
+suppressMessages(library(class))
+suppressMessages(library(modelr))
+library(lubridate)
+suppressMessages(library(caret)) ## for knn3
+suppressMessages(library(vip)) ##maybe needs to be installed
+games_2019 <- read_csv("~/Mscs 341b S21/Project/Matt_TJ_Doug/games_2019.csv")
+games_2018 <- read_csv("~/Mscs 341b S21/Project/Matt_TJ_Doug/games_2018.csv")
+```
+
+```{r, warning = FALSE}
+games_2018 <- games_2018%>%
+  separate(Date, into = c("Mth", "Day"), sep = " ")%>%
+  mutate(Month = if_else(Mth == "Mar", 3, 
+                   if_else(Mth == "Apr", 4,
+                     if_else(Mth == "May", 5,
+                        if_else(Mth == "Jun", 6,
+                           if_else(Mth == "Jul", 7,
+                              if_else(Mth == "Aug", 8,
+                                if_else(Mth == "Sep", 9, 10))))))))%>%
+  unite(Date, Month, Day, Year, sep = "/")
+
+games.train <- games_2018 %>%
+  mutate(Home = if_else(is.na(Var.4), 1, 0))%>%
+  separate(Rslt, into = c("Result", "Score"), sep = ",")%>%
+  separate(Score, into = c("Runs Scored", "Runs Allowed"), sep = "-") %>%
+  mutate(Home_Team = if_else(Home == 1, team, Opp))%>%
+  mutate(Away_Team = if_else(Home == 0, team, Opp))%>%
+  mutate(Matchup_1 = Home_Team)%>%
+  mutate(Matchup_2 = Away_Team)%>%
+  unite(Matchup, Matchup_1, Matchup_2, sep = ",")%>%
+  mutate(Run_Diff = as.numeric(`Runs Scored`) - as.numeric(`Runs Allowed`))%>%
+  mutate(Win = ifelse(Result == "W", 1, 0))%>%
+  arrange(mdy(Date), Matchup, Home)
+
+g1 <- games.train%>%
+  filter(team == lag(team) & Opp == lag(Opp))
+
+games.train <- setdiff(games.train, g1)
+
+games_2019 <- games_2019%>%
+  separate(Date, into = c("Mth", "Day"), sep = " ")%>%
+  mutate(Month = if_else(Mth == "Mar", 3, 
+                   if_else(Mth == "Apr", 4,
+                     if_else(Mth == "May", 5,
+                        if_else(Mth == "Jun", 6,
+                           if_else(Mth == "Jul", 7,
+                              if_else(Mth == "Aug", 8,
+                                if_else(Mth == "Sep", 9, 10))))))))%>%
+  unite(Date, Month, Day, Year, sep = "/")
+
+games.test <- games_2019 %>%
+  mutate(Home = if_else(is.na(Var.4), 1, 0))%>%
+  separate(Rslt, into = c("Result", "Score"), sep = ",")%>%
+  separate(Score, into = c("Runs Scored", "Runs Allowed"), sep = "-") %>%
+  mutate(Home_Team = if_else(Home == 1, team, Opp))%>%
+  mutate(Away_Team = if_else(Home == 0, team, Opp))%>%
+  mutate(Matchup_1 = Home_Team)%>%
+  mutate(Matchup_2 = Away_Team)%>%
+  unite(Matchup, Matchup_1, Matchup_2, sep = ",")%>%
+  mutate(Run_Diff = as.numeric(`Runs Scored`) - as.numeric(`Runs Allowed`))%>%
+  mutate(Win = ifelse(Result == "W", 1, 0))%>%
+  arrange(mdy(Date), Matchup, Home)
+
+
+g2 <- games.test %>%
+  filter(team == lag(team) & Opp == lag(Opp))
+
+games.test <- setdiff(games.test, g2)
+
+
+cols.num <- c(8:32, 36:62, 65:75, 77, 81)
+games.train[cols.num] <- sapply(games.train[cols.num],as.numeric)
+games.test[cols.num] <- sapply(games.test[cols.num],as.numeric)
+
+```
+
+Let's run some initial box and scatter plots to compare statistics we think may have an effect on a game with the outcome (win or loss).
+```{r}
+(RBox = ggplot (games.test, aes(y=as.factor(Win), x=R))+
+  geom_boxplot())
+
+(RABox = ggplot (games.test, aes(y=as.factor(Win), x=RA))+
+  geom_boxplot())
+
+(HBox = ggplot (games.test, aes(y=as.factor(Win), x=H))+
+  geom_boxplot())
+
+(HRBox = ggplot (games.test, aes(y=as.factor(Win), x=HR))+
+  geom_boxplot())
+
+(OBPBox = ggplot (games.test, aes(y=as.factor(Win), x=OBP))+
+  geom_boxplot())
+
+(SLGBox = ggplot (games.test, aes(y=as.factor(Win), x=SLG))+
+  geom_boxplot())
+
+(OPSBox = ggplot (games.test, aes(y=as.factor(Win), x=OPS))+
+  geom_boxplot())
+
+(HABox = ggplot (games.test, aes(y=as.factor(Win), x=HA))+
+  geom_boxplot())
+
+(BBABox = ggplot (games.test, aes(y=as.factor(Win), x=BBA))+
+  geom_boxplot())
+
+(HRABox = ggplot (games.test, aes(y=as.factor(Win), x=HRA))+
+  geom_boxplot())
+
+(StrPBox = ggplot (games.test, aes(y=as.factor(Win), x=StrPerc))+
+  geom_boxplot())
+
+(OPSABox = ggplot (games.test, aes(y=as.factor(Win), x=OPSA))+
+  geom_boxplot())
+
+(BAABox = ggplot (games.test, aes(y=as.factor(Win), x=BAA))+
+  geom_boxplot())
+
+(SOPercBox = ggplot (games.test, aes(y=as.factor(Win), x=SOPerc))+
+  geom_boxplot())
+
+(SOPercHBox = ggplot (games.test, aes(y=as.factor(Win), x=SOPercH))+
+  geom_boxplot())
+```
+
+```{r}
+(BA_BAAplot = ggplot(games.test)+
+  geom_point(aes(x= BA, y = BAA, color = as.factor(Win)), alpha = 0.4))
+
+(SOPplot = ggplot(games.test)+
+  geom_point(aes(x= SOPercH, y = SOPerc, color = as.factor(Win)), alpha = 0.4))
+```
+
+* Quick Model Test
+
+##Linear Model
+We'll try a simple linear model with random statistics just to see how it could look.
+```{r}
+mod.lm.samp <- lm(Win ~ OBP + SOPerc + H + HR + WHIP + HRA, 
+             data = games.train)
+
+games.test.samp <- games.test %>%
+  add_predictions(mod.lm.samp,
+                  type = "response") %>%
+  mutate(class = if_else(pred > 0.5, 1,0))
+
+table(games.test.samp$Win, games.test.samp$class)
+(err.lm.samp <- with(games.test.samp, mean(Win != class)))
+```
+
+```{r}
+summary(mod.lm.samp)
+```
+
+## Log Model
+Same process with log model
+```{r}
+mod.log.samp <- glm(Win ~ OBP + SOPerc + H + HR + WHIP + HRA, 
+             data = games.train,
+             family = "binomial")
+
+games.test.samp.log <- games.test %>%
+  add_predictions(mod.log.samp,
+                  type = "response") %>%
+  mutate(class = if_else(pred > 0.5, 1,0)) #class instead of response
+
+table(games.test.samp.log$Win, games.test.samp.log$class)
+(err.log.samp <- with(games.test.samp.log, mean(Win != class)))
+```
+
+```{r}
+summary(mod.log.samp)
+```
+
+
+## Lasso Model
+Now we'll work on creating a lasso model. First we want to make sure all variables included are numeric and that the data is represented as a matrix.
+```{r}
+games.y <- data.matrix(games.train$Win)
+
+
+games.x.lasso <- games.train %>%
+  select(8:32, 36:62, 65:75, 77)
+games.x.lasso[is.na(games.x.lasso)] <- 0
+games.x <- data.matrix(games.x.lasso)
+```
+
+```{r}
+lasso.cv <- cv.glmnet(games.x,
+                      games.y,
+                      family="binomial",
+                      type.measure="class", 
+                      alpha=1)
+
+plot(lasso.cv)
+```
+
+```{r}
+vip(lasso.cv)
+```
+
+```{r}
+lambda.opt <- lasso.cv$lambda.1se
+id <- with(lasso.cv,which(lasso.cv$lambda==lambda.opt))
+(err.lasso <- lasso.cv$cvm[id])
+```
+
+
+Obviously, RBI's and Runs/runs against will have an impact on the outcome. Let's look at more vague statistics to see how well they predict the model without these.
+
+```{r}
+games.test.y <- data.matrix(games.test$Win)
+games.test.x1 <- games.test %>%
+  select(10:11, 13:16, 18:32, 36:38, 42:62, 65:75, 77)
+games.test.x1[is.na(games.test.x1)] <- 0
+games.test.x <- data.matrix(games.test.x1)
+```
+
+```{r}
+##New data set, gotta adjust the numbers selected
+
+games.x.noR1 <- games.train %>%
+  select(10:11, 13:16, 18:32, 36:38, 42:62, 65:75, 77)
+games.x.noR1[is.na(games.x.noR1)] <- 0
+games.x1 <- data.matrix(games.x.noR1)
+```
+
+```{r}
+lasso.cv1 <- cv.glmnet(games.x1,
+                      games.y,
+                      family="binomial",
+                      type.measure="class", 
+                      alpha=1)
+
+plot(lasso.cv1)
+```
+
+```{r}
+vip(lasso.cv1)
+```
+
+```{r}
+lambda.opt <- lasso.cv1$lambda.1se
+id1 <- with(lasso.cv1,which(lasso.cv1$lambda==lambda.opt))
+(err.lasso1 <- lasso.cv1$cvm[id1])
+```
+
+```{r}
+preds.l <- predict(lasso.cv1, newx=games.x1,
+                 type="class")
+##The error rate on the testing dataset
+table(games.y, preds.l)
+```
+
+
+Here we see that OBPA and WHIP have a lot of relative importance, with BA, BAA, Home, and OBP follow quite far behind.
+
+## Ridge Model
+
+We'll use the same smaller dataset that we used for lasso for ridge as well (numeric explanatory variables) to predict a ridge model, along with an optimal lambda.
+
+```{r}
+ridge.cv1 <- cv.glmnet(games.x1, games.y,
+                      family="binomial",
+                      type.measure="class", 
+                      alpha=0)
+plot(ridge.cv1)
+```
+
+```{r}
+log(ridge.cv1$lambda.1se)
+log(ridge.cv1$lambda.1se)
+```
+
+```{r}
+lambda.opt1 <- ridge.cv1$lambda.1se
+id2 <- with(ridge.cv1,which(ridge.cv1$lambda==lambda.opt1))
+(err.ridge1 <- ridge.cv1$cvm[id2])
+```
+
+```{r}
+preds.r <- predict(ridge.cv1, newx=games.test.x,
+                 type="class")
+##The error rate on the testing dataset
+table(games.test.y ,preds.r)
+```
+
+```{r}
+vip(ridge.cv1)
+```
+
+
+```{r}
+mod.ridge.opt <- glmnet(games.x, games.y,
+                        family="binomial",
+                        type.measure="class",
+                        alpha=0,
+                        lambda=lambda.opt)
+```
+
+```{r}
+preds <- predict(mod.ridge.opt, newx=games.test.x,
+                 type="class")
+##The error rate on the testing dataset
+table(games.test.y ,preds)
+```
+
+```{r}
+(err.ridge.opt <- mean((games.test.y != preds)))
+```
+
+
+Interesting, we actually see no statistic representing Runs through the ridge model which is pretty cool. The greatest importance seems to be represented by specific pitching and hitting stats that wouldn't directly correlate with wins at first sight (which runs and runs against clearly would).
+
+These statistics include BA, OBPA, BAA, SLGA, StrPerc, SLG, SOPercH, and OPSA (where BA has clear importance over other variables, and OBPA and BAA have a significant difference in importance over the others).
+
+* Least important features?
+```{r}
+res.vip <- vip(ridge.cv1,num_features=55)
+vip.dat <- res.vip[["data"]]
+vip.dat[52:55,]
+```
+
+CSA, Str, HBPA, and Pit have the least significance according to our ridge model.
+
+```{r}
+res.vip1 <- vip(lasso.cv1,num_features=55)
+vip.dat1 <- res.vip1[["data"]]
+vip.dat1[52:55,]
+```
+
+## Linear and Log model Part II
+
+Now that we've seen these, let's try linear and log models with the reduced variables (numeric ones) that we've used.
+
+```{r}
+##New data set, gotta adjust the numbers selected
+games.test1 <- games.test %>%
+  select(Win, 10:11, 13:16, 18:32, 36:38, 42:62, 65:75, 77)
+
+games.train1 <- games.train %>%
+  select(Win, 10:11, 13:16, 18:32, 36:38, 42:62, 65:75, 77)
+
+games.train1[is.na(games.train1)] <- 0
+games.test1[is.na(games.test1)] <- 0
+```
+
+
+```{r}
+mod.lm <- lm(Win ~ ., 
+             data = games.train1)
+
+games.test.lm <- games.test1 %>%
+  add_predictions(mod.lm,
+                  type = "response") %>%
+  mutate(class = if_else(pred > 0.5, 1,0))
+
+table(games.test.lm$Win, games.test.lm$class)
+(err.lm <- with(games.test.lm, mean(Win != class)))
+```
+
+```{r}
+vip(mod.lm)
+```
+
+```{r}
+summary(mod.lm)
+```
+
+```{r}
+res.vip2 <- vip(mod.lm,num_features=55)
+vip.dat2 <- res.vip2[["data"]]
+vip.dat2[52:55,]
+```
+
+
+```{r}
+mod.log <- glm(Win ~ ., 
+             data = games.train1,
+             family = "binomial")
+
+games.test.log <- games.test1 %>%
+  add_predictions(mod.log,
+                  type = "response") %>%
+  mutate(class = if_else(pred > 0.5, 1,0))
+
+table(games.test.log$Win, games.test.log$class)
+(err.log <- with(games.test.log, mean(Win != class)))
+```
+
+```{r}
+vip(mod.log)
+```
+
+```{r}
+summary(mod.log)
+```
+
+```{r}
+res.vip3 <- vip(mod.log,num_features=55)
+vip.dat3 <- res.vip3[["data"]]
+vip.dat3[52:55,]
+```
+
+The log model has an insanely low error of 0.005.
+
+
+```{r}
+games.train2 <- games.train%>%
+  mutate(Home_Win = if_else(Home == 1 & Win == 1 | Home == 0 & Win == 0, 1, 0),
+         Home_BA = if_else(Home == 0, lead(BA), BA),
+         Away_BA = if_else(Home == 1, lag(BA), BA),
+         Home_OBP = if_else(Home == 0, lead(OBP), OBP),
+         Away_OBP = if_else(Home == 1, lag(OBP), OBP),
+         Home_SLG = if_else(Home == 0, lead(SLG), SLG),
+         Away_SLG = if_else(Home == 1, lag(SLG), SLG),
+         Home_OPS = if_else(Home == 0, lead(OPS), OPS),
+         Away_OPS = if_else(Home == 1, lag(OPS), OPS),
+         Home_ISO = Home_SLG - Home_BA,
+         Away_ISO = Away_SLG - Away_BA,
+         Home_BAA = if_else(Home == 0, lead(BAA), BAA),
+         Away_BAA = if_else(Home == 1, lag(BAA), BAA),
+         Home_OBPA = if_else(Home == 0, lead(OBPA), OBPA),
+         Away_OBPA = if_else(Home == 1, lag(OBPA), OBPA),
+         Home_SLGA = if_else(Home == 0, lead(SLGA), SLGA),
+         Away_SLGA = if_else(Home == 1, lag(SLGA), SLGA),
+         Home_OPSA = if_else(Home == 0, lead(OPSA), OPSA),
+         Away_OPSA = if_else(Home == 1, lag(OPSA), OPSA),
+         Home_StrPerc = if_else(Home == 0, lead(StrPerc), StrPerc),
+         Away_StrPerc = if_else(Home == 1, lag(StrPerc), StrPerc),
+         Home_ERA = if_else(Home == 0, lead(ERA), ERA),
+         Away_ERA = if_else(Home == 1, lag(ERA), ERA),
+         Home_WHIP = if_else(Home == 0, lead(WHIP), WHIP),
+         Away_WHIP = if_else(Home == 1, lag(WHIP), WHIP),
+         Home_FIP = if_else(Home == 0, lead(FIP), FIP),
+         Away_FIP = if_else(Home == 1, lag(FIP), FIP),
+         Home_SOPerc = if_else(Home == 0, lead(SOPerc), SOPerc),
+         Away_SOPerc = if_else(Home == 1, lag(SOPerc), SOPerc),
+         Home_SOPercH = if_else(Home == 0, lead(SOPercH), SOPercH),
+         Away_SOPercH = if_else(Home == 1, lag(SOPercH), SOPercH),
+         Home_K9 = if_else(Home == 0, lead(K_9), K_9),
+         Away_K9 = if_else(Home == 1, lag(K_9), K_9),
+         Home_KBB = if_else(Home == 0, lead(K_BB), K_BB),
+         Away_KBB = if_else(Home == 1, lag(K_BB), K_BB),
+         Home_HR9 = if_else(Home == 0, lead(HR_9), HR_9),
+         Away_HR9 = if_else(Home == 1, lag(HR_9), HR_9),
+         Home_RunDiff = if_else(Home == 0, lead(Run_Diff), Run_Diff))%>%
+  select(Date, Matchup, Home_Team, Home_BA, Home_OBP, Home_SLG, Home_OPS, Home_ISO, Home_SOPercH, Home_BAA, Home_OBPA, Home_SLGA, Home_OPSA, Home_StrPerc, Home_ERA, Home_WHIP, Home_FIP, Home_SOPerc, Home_KBB, Home_K9, Home_HR9, Away_Team, Away_BA, Away_OBP, Away_SLG, Away_OPS, Away_ISO, Away_SOPercH, Away_BAA, Away_OBPA, Away_SLGA, Away_OPSA, Away_StrPerc, Away_ERA, Away_WHIP, Away_FIP, Away_SOPerc, Away_KBB, Away_K9, Away_HR9, Home_Win, Home_RunDiff)%>%
+  unique
+```
+
+
+```{r}
+games.test2 <- games.test%>%
+  mutate(Home_Win = if_else(Home == 1 & Win == 1 | Home == 0 & Win == 0, 1, 0),
+         Home_BA = if_else(Home == 0, lead(BA), BA),
+         Away_BA = if_else(Home == 1, lag(BA), BA),
+         Home_OBP = if_else(Home == 0, lead(OBP), OBP),
+         Away_OBP = if_else(Home == 1, lag(OBP), OBP),
+         Home_SLG = if_else(Home == 0, lead(SLG), SLG),
+         Away_SLG = if_else(Home == 1, lag(SLG), SLG),
+         Home_OPS = if_else(Home == 0, lead(OPS), OPS),
+         Away_OPS = if_else(Home == 1, lag(OPS), OPS),
+         Home_ISO = Home_SLG - Home_BA,
+         Away_ISO = Away_SLG - Away_BA,
+         Home_BAA = if_else(Home == 0, lead(BAA), BAA),
+         Away_BAA = if_else(Home == 1, lag(BAA), BAA),
+         Home_OBPA = if_else(Home == 0, lead(OBPA), OBPA),
+         Away_OBPA = if_else(Home == 1, lag(OBPA), OBPA),
+         Home_SLGA = if_else(Home == 0, lead(SLGA), SLGA),
+         Away_SLGA = if_else(Home == 1, lag(SLGA), SLGA),
+         Home_OPSA = if_else(Home == 0, lead(OPSA), OPSA),
+         Away_OPSA = if_else(Home == 1, lag(OPSA), OPSA),
+         Home_StrPerc = if_else(Home == 0, lead(StrPerc), StrPerc),
+         Away_StrPerc = if_else(Home == 1, lag(StrPerc), StrPerc),
+         Home_ERA = if_else(Home == 0, lead(ERA), ERA),
+         Away_ERA = if_else(Home == 1, lag(ERA), ERA),
+         Home_WHIP = if_else(Home == 0, lead(WHIP), WHIP),
+         Away_WHIP = if_else(Home == 1, lag(WHIP), WHIP),
+         Home_FIP = if_else(Home == 0, lead(FIP), FIP),
+         Away_FIP = if_else(Home == 1, lag(FIP), FIP),
+         Home_SOPerc = if_else(Home == 0, lead(SOPerc), SOPerc),
+         Away_SOPerc = if_else(Home == 1, lag(SOPerc), SOPerc),
+         Home_SOPercH = if_else(Home == 0, lead(SOPercH), SOPercH),
+         Away_SOPercH = if_else(Home == 1, lag(SOPercH), SOPercH),
+         Home_K9 = if_else(Home == 0, lead(K_9), K_9),
+         Away_K9 = if_else(Home == 1, lag(K_9), K_9),
+         Home_KBB = if_else(Home == 0, lead(K_BB), K_BB),
+         Away_KBB = if_else(Home == 1, lag(K_BB), K_BB),
+         Home_HR9 = if_else(Home == 0, lead(HR_9), HR_9),
+         Away_HR9 = if_else(Home == 1, lag(HR_9), HR_9),
+         Home_RunDiff = if_else(Home == 0, lead(Run_Diff), Run_Diff))%>%
+  select(Date, Matchup, Home_Team, Home_BA, Home_OBP, Home_SLG, Home_OPS, Home_ISO, Home_SOPercH, Home_BAA, Home_OBPA, Home_SLGA, Home_OPSA, Home_StrPerc, Home_ERA, Home_WHIP, Home_FIP, Home_SOPerc, Home_KBB, Home_K9, Home_HR9, Away_Team, Away_BA, Away_OBP, Away_SLG, Away_OPS, Away_ISO, Away_SOPercH, Away_BAA, Away_OBPA, Away_SLGA, Away_OPSA, Away_StrPerc, Away_ERA, Away_WHIP, Away_FIP, Away_SOPerc, Away_KBB, Away_K9, Away_HR9, Home_Win, Home_RunDiff)%>%
+  unique
+```
+
+
+
+```{r}
+View(games.train2)
+```
+
+
+```{r}
+games.train3 <- games.train2 %>%
+  select(4:21, 23:41)
+
+games.test3 <- games.test2 %>%
+  select(4:21, 23:41)
+
+mod.log.cumu <- glm(Home_Win ~.,
+               data = games.train3,
+               family = "binomial")
+
+games.test.log <- games.test3 %>%
+  add_predictions(mod.log.cumu,
+                  type = "response") %>%
+  mutate(class = if_else(pred > 0.5, 1,0)) #class instead of response
+
+table(games.test.log$Home_Win, games.test.log$class)
+(err.log.cumu <- with(games.test.log, mean(Home_Win != class)))
+```
+
+```{r}
+vip(mod.log.cumu)
+```
+
+```{r}
+res.vip4 <- vip(mod.log.cumu,num_features=55)
+vip.dat4 <- res.vip4[["data"]]
+vip.dat4[29:32,]
+```
+
+```{r}
+summary(mod.log.cumu)
+```
+
+
+
+```{r}
+mod.lm.cumu <- lm(Home_Win ~.,
+               data = games.train3)
+```
+
+```{r}
+games.test.lm <- games.test3 %>%
+  add_predictions(mod.lm.cumu,
+                  type = "response") %>%
+  mutate(class = if_else(pred > 0.5, 1,0))
+```
+
+```{r}
+table(games.test.lm$Home_Win, games.test.lm$class)
+(err.lm.cumu <- with(games.test.lm, mean(Home_Win != class)))
+```
+
+```{r}
+vip(mod.lm.cumu)
+```
+
+```{r}
+res.vip5 <- vip(mod.lm.cumu,num_features=55)
+vip.dat5 <- res.vip5[["data"]]
+vip.dat5[29:32,]
+```
+
+```{r}
+summary(mod.lm.cumu)
+```
+
+
+```{r}
+games.y3 <- data.matrix(games.train2$Home_Win)
+
+
+##New data set, gotta adjust the numbers selected
+games.x3 <- games.train2 %>%
+  select(4:21, 23:40)
+games.x3[is.na(games.x3)] <- 0
+games.x3 <- data.matrix(games.x3)
+```
+
+```{r}
+ridge.cv.cumu <- cv.glmnet(games.x3, games.y3,
+                      family="binomial",
+                      type.measure="class", 
+                      alpha=0)
+plot(ridge.cv.cumu)
+```
+
+
+```{r}
+log(ridge.cv.cumu$lambda.1se)
+log(ridge.cv.cumu$lambda.1se)
+```
+
+```{r}
+lambda.opt.cumu <- ridge.cv.cumu$lambda.1se
+idrcumu <- with(ridge.cv.cumu,which(ridge.cv.cumu$lambda==lambda.opt.cumu))
+(err.ridge.cumu <- ridge.cv.cumu$cvm[idrcumu])
+```
+
+```{r}
+preds.ridge.cumu <- predict(ridge.cv.cumu, newx=games.test.x3,
+                 type="class")
+##The error rate on the testing dataset
+table(games.test.y3 ,preds.ridge.cumu)
+```
+
+```{r}
+vip(ridge.cv.cumu)
+```
+
+```{r}
+res.vip6 <- vip(ridge.cv.cumu,num_features=55)
+vip.dat6 <- res.vip6[["data"]]
+vip.dat6[29:32,]
+```
+
+
+```{r}
+mod.ridge.opt.cumu <- glmnet(games.x3, games.y3,
+                        family="binomial",
+                        type.measure="class",
+                        alpha=0,
+                        lambda=lambda.opt.cumu)
+
+##New data set, gotta adjust the numbers selected
+games.test.y3 <- data.matrix(games.test2$Home_Win)
+games.test.x3 <- games.test2 %>%
+  select(4:21, 23:40)
+games.test.x3[is.na(games.test.x3)] <- 0
+games.test.x3 <- data.matrix(games.test.x3)
+```
+
+```{r}
+preds.rcumu <- predict(mod.ridge.opt.cumu, newx=games.test.x3,
+                 type="class")
+##The error rate on the testing dataset
+table(games.test.y3 ,preds.rcumu)
+```
+
+```{r}
+(err.ridge.opt.cumu <- mean((games.test.y3 != preds.rcumu)))
+```
+
+```{r}
+vip(mod.ridge.opt.cumu)
+```
+
+```{r}
+res.vip7 <- vip(mod.ridge.opt.cumu,num_features=55)
+vip.dat7 <- res.vip7[["data"]]
+vip.dat7[29:32,]
+```
+
+
+
+```{r}
+games.y3 <- data.matrix(games.train2$Home_Win)
+
+
+##New data set, gotta adjust the numbers selected
+games.x.lasso <- games.train2 %>%
+  select(4:21, 23:40)
+games.x.lasso[is.na(games.x.lasso)] <- 0
+games.x3 <- data.matrix(games.x.lasso)
+```
+
+```{r}
+lasso.cv.cumu <- cv.glmnet(games.x3,
+                      games.y3,
+                      family="binomial",
+                      type.measure="class", 
+                      alpha=1)
+
+plot(lasso.cv.cumu)
+```
+
+```{r}
+vip(lasso.cv.cumu)
+```
+
+```{r}
+preds.lcumu <- predict(lasso.cv.cumu, newx=games.test.x3,
+                 type="class")
+##The error rate on the testing dataset
+table(games.test.y3 ,preds.lcumu)
+```
+
+```{r}
+log(lasso.cv.cumu$lambda.1se)
+log(lasso.cv.cumu$lambda.1se)
+```
+
+```{r}
+lambda.opt.l <- lasso.cv.cumu$lambda.1se
+idlcumu <- with(lasso.cv.cumu,which(lasso.cv.cumu$lambda==lambda.opt.l))
+(err.lasso.cumu <- lasso.cv.cumu$cvm[idlcumu])
+```
+
+
+```{r}
+mod.lasso.opt.cumu <- glmnet(games.x3, games.y3,
+                        family="binomial",
+                        type.measure="class",
+                        alpha=1,
+                        lambda=lambda.opt.l)
+```
+
+```{r}
+preds <- predict(mod.lasso.opt, newx=games.test.x,
+                 type="class")
+##The error rate on the testing dataset
+table(games.test.y ,preds)
+```
+
+```{r}
+(err.lasso.opt <- mean((games.test.y != preds)))
+```
+
+
+```{r}
+vip(mod.lasso.opt)
+```
+
+
+```{r}
+games.train4 <- games.train2%>%
+  mutate(BA_diff = Home_BA - Away_BA,
+         OBP_diff = Home_OBP - Away_OBP,
+         SLG_diff = Home_SLG - Away_SLG,
+         OPS_diff = Home_OPS - Away_OPS,
+         ISO_diff = Home_ISO - Away_ISO,
+         SOPercH_diff = Home_SOPercH - Away_SOPercH,
+         BAA_diff = Home_BAA - Away_BAA,
+         OBPA_diff = Home_OBPA - Away_OBPA,
+         SLGA_diff = Home_SLGA - Away_SLGA,
+         OPSA_diff = Home_OPSA - Away_OPSA,
+         StrPerc_diff = Home_StrPerc - Away_StrPerc,
+         ERA_diff = Home_ERA - Away_ERA,
+         WHIP_diff = Home_WHIP - Away_WHIP,
+         FIP_diff = Home_FIP - Away_FIP,
+         SOPerc_diff = Home_SOPerc - Away_SOPerc,
+         KBB_diff = Home_KBB - Away_KBB,
+         K9_diff = Home_K9 - Away_K9,
+         HR9_diff = Home_HR9 - Away_HR9)
+
+games.train5 <- games.train4%>%
+  select(Date, Matchup, Home_Team, Away_Team, BA_diff, OBP_diff, SLG_diff, OPS_diff, ISO_diff, SOPercH_diff, BAA_diff, OBPA_diff, OPSA_diff, StrPerc_diff, ERA_diff, WHIP_diff, FIP_diff, SOPerc_diff, KBB_diff, K9_diff, HR9_diff, Home_Win, Home_RunDiff)
+
+games.train6 <- games.train4%>%
+  mutate(BA_percdiff = BA_diff/Home_BA,
+         OBP_percdiff = OBP_diff/Home_OBP,
+         SLG_percdiff = SLG_diff/Home_SLG,
+         OPS_percdiff = OPS_diff/Home_OPS,
+         ISO_percdiff = ISO_diff/Home_ISO,
+         SOPercH_percdiff = SOPercH_diff/Home_SOPercH,
+         BAA_percdiff = BAA_diff/Home_BAA,
+         OBPA_percdiff = OBPA_diff/Home_OBPA,
+         SLGA_percdiff = SLGA_diff/Home_SLGA,
+         OPSA_percdiff = OPSA_diff/Home_OPSA,
+         StrPerc_percdiff = StrPerc_diff/Home_StrPerc,
+         ERA_percdiff = ERA_diff/Home_ERA,
+         WHIP_percdiff = WHIP_diff/Home_WHIP,
+         FIP_percdiff = FIP_diff/Home_FIP,
+         SOPerc_percdiff = SOPerc_diff/Home_SOPerc,
+         KBB_percdiff = KBB_diff/Home_KBB,
+         K9_percdiff = K9_diff/Home_K9,
+         HR9_percdiff = HR9_diff/Home_HR9)%>%
+  select(Date, Matchup, Home_Team, Away_Team, BA_percdiff, OBP_percdiff, SLG_percdiff, OPS_percdiff, ISO_percdiff, SOPercH_percdiff, BAA_percdiff, OBPA_percdiff, OPSA_percdiff, StrPerc_percdiff, ERA_percdiff, WHIP_percdiff, FIP_percdiff, SOPerc_percdiff, KBB_percdiff, K9_percdiff, HR9_percdiff, Home_Win, Home_RunDiff)
+  
+```
+
+
+```{r}
+games.test4 <- games.test2%>%
+  mutate(BA_diff = Home_BA - Away_BA,
+         OBP_diff = Home_OBP - Away_OBP,
+         SLG_diff = Home_SLG - Away_SLG,
+         OPS_diff = Home_OPS - Away_OPS,
+         ISO_diff = Home_ISO - Away_ISO,
+         SOPercH_diff = Home_SOPercH - Away_SOPercH,
+         BAA_diff = Home_BAA - Away_BAA,
+         OBPA_diff = Home_OBPA - Away_OBPA,
+         SLGA_diff = Home_SLGA - Away_SLGA,
+         OPSA_diff = Home_OPSA - Away_OPSA,
+         StrPerc_diff = Home_StrPerc - Away_StrPerc,
+         ERA_diff = Home_ERA - Away_ERA,
+         WHIP_diff = Home_WHIP - Away_WHIP,
+         FIP_diff = Home_FIP - Away_FIP,
+         SOPerc_diff = Home_SOPerc - Away_SOPerc,
+         KBB_diff = Home_KBB - Away_KBB,
+         K9_diff = Home_K9 - Away_K9,
+         HR9_diff = Home_HR9 - Away_HR9)
+
+games.test5 <- games.test4%>%
+  select(Date, Matchup, Home_Team, Away_Team, BA_diff, OBP_diff, SLG_diff, OPS_diff, ISO_diff, SOPercH_diff, BAA_diff, OBPA_diff, OPSA_diff, StrPerc_diff, ERA_diff, WHIP_diff, FIP_diff, SOPerc_diff, KBB_diff, K9_diff, HR9_diff, Home_Win, Home_RunDiff)
+
+games.test6 <- games.test4%>%
+  mutate(BA_percdiff = BA_diff/Home_BA,
+         OBP_percdiff = OBP_diff/Home_OBP,
+         SLG_percdiff = SLG_diff/Home_SLG,
+         OPS_percdiff = OPS_diff/Home_OPS,
+         ISO_percdiff = ISO_diff/Home_ISO,
+         SOPercH_percdiff = SOPercH_diff/Home_SOPercH,
+         BAA_percdiff = BAA_diff/Home_BAA,
+         OBPA_percdiff = OBPA_diff/Home_OBPA,
+         SLGA_percdiff = SLGA_diff/Home_SLGA,
+         OPSA_percdiff = OPSA_diff/Home_OPSA,
+         StrPerc_percdiff = StrPerc_diff/Home_StrPerc,
+         ERA_percdiff = ERA_diff/Home_ERA,
+         WHIP_percdiff = WHIP_diff/Home_WHIP,
+         FIP_percdiff = FIP_diff/Home_FIP,
+         SOPerc_percdiff = SOPerc_diff/Home_SOPerc,
+         KBB_percdiff = KBB_diff/Home_KBB,
+         K9_percdiff = K9_diff/Home_K9,
+         HR9_percdiff = HR9_diff/Home_HR9)%>%
+  select(Date, Matchup, Home_Team, Away_Team, BA_percdiff, OBP_percdiff, SLG_percdiff, OPS_percdiff, ISO_percdiff, SOPercH_percdiff, BAA_percdiff, OBPA_percdiff, OPSA_percdiff, StrPerc_percdiff, ERA_percdiff, WHIP_percdiff, FIP_percdiff, SOPerc_percdiff, KBB_percdiff, K9_percdiff, HR9_percdiff, Home_Win, Home_RunDiff)
+  
+```
+
+
+##Trees
+
+```{r}
+library(randomForest)
+games.trainx <- games.train3 %>%
+  subset(select = -Home_KBB)
+games.testx <- games.test3 %>%
+  subset(select = -Home_KBB)
+  
+
+numTree <- 50
+numPred <- ncol(games.trainx)-1
+
+mod.bag <- randomForest(Home_Win ~ .,
+                        data=games.trainx,
+                        ntree=numTree,
+                        mtry=numPred)
+
+plot(mod.bag)
+```
+
+
+
+```{r}
+vip(mod.bag)
+
+res.vipx <- vip(mod.bag,num_features=55)
+vip.datx <- res.vip2[["data"]]
+vip.datx[52:55,]
+```
+
+```{r}
+view(bagtest.df)
+bagtest.df <- games.testx %>%
+  add_predictions(mod.bag,
+                  var="win.pred",
+                  type = "class") %>%
+  mutate(win.pred = ifelse(win.pred > 0.5, 1, 0))
+
+mse.bag <- bagtest.df %>%
+  with(mean((Home_Win != win.pred)))
+
+mse.bag
+
+table(bagtest.df$Home_Win, bagtest.df$win.pred)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
