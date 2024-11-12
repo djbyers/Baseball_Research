@@ -3,6 +3,12 @@ This repository includes projects and research done for baseball/softball relate
 
 A description of each section and the files contained within each is contained below:
 
+## Personal Work
+
+#### Link to Shift Article
+
+This document contains a link to an RPubs site that I created in the Spring of 2020 that, while technically was submitted as school work, is something I consider to be my first project that wasn't school or work related, as I was working on it previously and simply ended up submitting it for a final class project that semester. The article outlines the idea of defensive shifts in MLB, and why they aren't as responsible for the decline in offense we're seeing.
+
 ## SABR Certification Material
 
 #### SABR Course 2
