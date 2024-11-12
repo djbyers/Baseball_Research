@@ -7,7 +7,7 @@ A description of each section and the files contained within each is contained b
 
 #### SABR Course 2 Case Study
 
-The final project to complete the level two SABR certification was a case study of whether or not the Padres should have signed Juan Soto to a contract extension prior to the 2023 MLB season. We were required to complete an analysis of who he is as a player, both currently and in the historical context of the game, come up with a future projection for how he would perform moving forward, create a contract projection to match the production projection, and then analyze how that contract would fit within the context of the Padres payroll situation. However, we did have a lenght restriction, so I furthered my analysis in the SABR Course 2 Case Study - Extended document.
+The final project to complete the level two SABR certification was a case study of whether or not the Padres should have signed Juan Soto to a contract extension prior to the 2023 MLB season. We were required to complete an analysis of who he is as a player, both currently and in the historical context of the game, come up with a future projection for how he would perform moving forward, create a contract projection to match the production projection, and then analyze how that contract would fit within the context of the Padres payroll situation, given the stipulation that the front office and ownership groups did not want to take on a ton of financial risk. However, we did have a lenght restriction, so I furthered my analysis in the SABR Course 2 Case Study - Extended document.
 
 
 ## Sports Analytics Club
