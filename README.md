@@ -3,7 +3,7 @@ This repository includes projects and research done for baseball/softball relate
 
 A description of each section and the files contained within each is contained below:
 
-## SABR Certification Work
+## SABR Certification Material
 
 #### SABR Course 2 Case Study
 
