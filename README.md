@@ -33,7 +33,7 @@ This document includes a number of data visializations for one of the players on
 
 #### Count and Pitch Type Analysis
 
-This file contains a script that would take the outputs of our clean data files (created using the Data Cleaning script) and calculate specific statistics (Batting Average, On Base %, etc.) for individual players (batters and pitchers) by both pitch type and ball/strike count. The **2019 Stats Breakdown - R outputs ** file includes the results of these scripts, with the names of the players censored out.
+This file contains a script that would take the outputs of our clean data files (created using the Data Cleaning script) and calculate specific statistics (Batting Average, On Base %, etc.) for individual players (batters and pitchers) by both pitch type and ball/strike count. The **2019 Stats Breakdown - R outputs file** includes the results of these scripts, with the names of the players censored out.
 
 
 ## School Work
